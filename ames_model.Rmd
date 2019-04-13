@@ -1,0 +1,177 @@
+---
+title: "Untitled"
+author: "James Trimarco"
+date: "4/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Prep
+### libraries
+```{r}
+library(tidyverse)
+library(glmnet)
+library(caret)
+```
+
+### Read in data from csv files
+```{r cars}
+train <- read.csv("/Users/james/Documents/NCDS/Semester_2/Inference_II/hw9/house-prices-advanced-regression-techniques/train.csv", 
+                  na.strings = c(""))
+
+test <- read.csv("/Users/james/Documents/NCDS/Semester_2/Inference_II/hw9/house-prices-advanced-regression-techniques/test.csv", 
+                 na.strings = c(""))
+```
+
+### Pairwise plots
+```{r fig.height=10, fig.width=10}
+# idx <- unlist(list(81, 1:10))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 11:20))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 21:30))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 31:40))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 41:50))
+# pairs(train[idx])
+```
+
+### Bind train and test data
+This step ensures that all factors have the same number of levels in both training and test sets. 
+```{r}
+# consolidate the 2 data sets after creating a variable indicating train / test 
+train$is_train <- 1; 
+test$is_train <- 0
+test$SalePrice <- NA
+dat <- rbind(train,test)
+```
+
+
+### Coerce tricky vars
+These predictors are often misclassified, so we're coercing them explicitly. 
+```{r}
+tricky_numerics <- c("BsmtUnfSF","TotalBsmtSF", "GarageYrBlt", "LotFrontage", 
+                     "MasVnrArea", "BsmtFinSF1", "BsmtFinSF2", "GarageArea")
+
+for (var in tricky_numerics) {
+    dat[[var]] <- as.integer(dat[[var]])
+}
+
+tricky_factors <- c("BsmtFullBath", "BsmtHalfBath", "GarageCars")
+
+for (var in tricky_factors) {
+    dat[[var]] <- as.factor(dat[[var]])
+}
+```
+
+### Add polynomial vars
+```{r}
+LotArea_SQ <- dat$LotArea**2
+YearBuilt_SQ <- dat$YearBuilt**2
+
+dat <- cbind(dat, YearBuilt_SQ, LotArea_SQ)
+str(dat)
+```
+
+
+### Refactor factors
+Here's where we enforce consistent levels across the factors in the test and train sets. 
+
+Question: Where best to remove ID column?
+```{r}
+fact_idx <- sapply(dat, function(x) is.factor(x))   
+fact_vars <- names(dat[fact_idx])
+fact_vars
+
+numeric_idx <- sapply(dat, function(x) is.numeric(x))
+numeric_idx[c("is_train", "Id", "SalePrice")] <- FALSE # take out ids, flags, response
+numeric_vars <- names(dat[numeric_idx])
+numeric_vars
+
+# check the levels of var_b and var_e in this consolidated, train and test data sets
+length(levels(dat$Alley)); length(unique(train$Alley));
+
+length(levels(dat$HouseStyle)); length(unique(dat$HouseStyle))
+```
+
+### Create formula
+This is used for creating a model matrix. 
+```{r}
+fact_formula <- as.formula(paste("~", 
+                                 paste(fact_vars, sep="", collapse= "+")))
+```
+
+### Separate data
+Get back the train and test data
+```{r}
+# Use the flag before to separate observations
+train <- subset(dat, is_train == 1); 
+test <- subset(dat, is_train == 0)
+train$is_train <- NULL; test$is_train <- NULL
+```
+
+### Define contrasts function
+Required for creating model matrix
+```{r}
+contr.Dummy <- function(contrasts, ...){
+   conT <- contr.treatment(contrasts=FALSE, ...)
+   conT
+}
+options(contrasts=c(ordered='contr.Dummy', unordered='contr.Dummy'))
+```
+
+### Create xfactors
+This matrix contains only the factors. The numerical data is accessed separately.
+```{r}
+xfactors_train <- model.matrix(fact_formula, data = train)[, -1]
+```
+
+## Fit on train data
+```{r}
+#sapply(train[, numeric_idx], function(x) is.numeric(x))
+numeric_idx <- numeric_idx[-(grep("is_train", names(numeric_idx)))]
+numbers <- scale(train[, numeric_idx])
+
+x  <- data.matrix(data.frame(numbers, xfactors_train))
+y <- data.matrix(train$SalePrice)
+
+glmmod <- glmnet(x, y, alpha=1, family="gaussian")
+plot(glmmod)
+
+coef(glmmod)[, 15][coef(glmmod)[, 15] > 0]
+```
+
+### Cross validation
+```{r}
+cv.model <- cv.glmnet(x, y, alpha=1, type.measure = "mse", nfolds = 10)
+(best.lambda <- cv.model$lambda.min)
+
+sqrt(cv.model$cvm[cv.model$lambda == cv.model$lambda.min])
+
+plot(cv.model)
+
+coef(cv.model)
+```
+### prep test data
+```{r}
+xfactors_test <- model.matrix(fact_formula, data = test)[, -1]
+#sapply(train[, numeric_idx], function(x) is.numeric(x))
+numbers <- scale(test[, numeric_idx])
+
+x  <- data.matrix(data.frame(numbers, xfactors_test))
+```
+
+### make predictions
+```{r}
+pred = predict(cv.model, s=cv.model$lambda.min, newx=x)
+head(pred)
+```
+
