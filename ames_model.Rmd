@@ -18,12 +18,16 @@ library(caret)
 ```
 
 ### Read in data from csv files
-```{r cars}
-train <- read.csv("/Users/james/Documents/NCDS/Semester_2/Inference_II/hw9/house-prices-advanced-regression-techniques/train.csv", 
-                  na.strings = c(""))
+```{r, warning=FALSE}
+# Optaining string of data directory
+file_directory <- dirname(rstudioapi::getActiveDocumentContext()$path)
+file_directory <- glue::glue(file_directory, "/Kaggle_Data")
 
-test <- read.csv("/Users/james/Documents/NCDS/Semester_2/Inference_II/hw9/house-prices-advanced-regression-techniques/test.csv", 
-                 na.strings = c(""))
+# Setting working directory
+setwd(file_directory)
+train <- read.csv("train.csv", na.strings = c(""))
+
+test <- read.csv("test.csv", na.strings = c(""))
 ```
 
 ### Pairwise plots
@@ -175,3 +179,44 @@ pred = predict(cv.model, s=cv.model$lambda.min, newx=x)
 head(pred)
 ```
 
+### Austin messing with elastic net
+```{r}
+
+xfactors_train <- model.matrix(fact_formula, data = train)[, -1]
+
+numeric_idx <- numeric_idx[-(grep("is_train", names(numeric_idx)))]
+numbers <- scale(train[, numeric_idx])
+
+x  <- data.matrix(data.frame(numbers, xfactors_train))
+y <- data.matrix(train$SalePrice)
+
+head(data.frame(x,y))
+
+my_control <- trainControl(method = "repeatedcv",
+                           number = 5,
+                           repeats = 1,
+                           search = "random",
+                           verboseIter = TRUE)
+
+my_elastic_net <- train(x,as.double(y),
+                        method = "glmnet",
+                        preProcess = c("center", "scale"),
+                        tuneLength = 25,
+                        trControl = my_control)
+
+my_elastic_net$bestTune
+
+coef(my_elastic_net$finalModel, my_elastic_net$bestTune$lambda)
+
+```
+
+```{r}
+xfactors_test <- model.matrix(fact_formula, data = test)[, -1]
+#sapply(train[, numeric_idx], function(x) is.numeric(x))
+numbers <- scale(test[, numeric_idx])
+
+x  <- data.matrix(data.frame(numbers, xfactors_test))
+
+predict(my_elastic_net$finalModel,newx=x)
+
+```
