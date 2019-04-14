@@ -311,7 +311,7 @@ preds_e <- predict(my_elastic_net$finalModel,
 
 ### Write elasticnet csv
 ```{r}
-preds_e <- data.frame(preds) %>% rownames_to_column()
+preds_e <- data.frame(preds_e) %>% rownames_to_column()
 colnames(preds_e) <- c("Id", "SalePrice")
 head(preds_e, 3)
 
