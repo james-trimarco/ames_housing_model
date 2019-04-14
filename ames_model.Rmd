@@ -134,7 +134,7 @@ options(contrasts=c(ordered='contr.Dummy', unordered='contr.Dummy'))
 ### Create factors
 This matrix contains only the factors. The numerical data is accessed separately.
 ```{r}
-factors_train <- model.matrix(fact_formula, data = train)[, -1]
+factors_train <- model.matrix(fact_formula, data = train)
 ```
 
 ## Fit on train data
@@ -164,8 +164,8 @@ coef(cv.model)
 ```
 ### prep test data
 ```{r}
-factors_test <- model.matrix(fact_formula, data = test)[, -1]
-#sapply(train[, numeric_idx], function(x) is.numeric(x))
+factors_test <- model.matrix(fact_formula, data = test)
+
 quants_test <- scale(test[, quant_idx])
 
 x  <- data.matrix(data.frame(quants_test, factors_test))
