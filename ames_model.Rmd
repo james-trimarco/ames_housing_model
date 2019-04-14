@@ -68,8 +68,8 @@ dat <- rbind(train,test)
 ### Encode NAs
 This is an opportunity to impute the median
 ```{r}
-dat$LotFrontage[dat$LotFrontage == "NA"] <- NA
-dat$GarageYrBlt[dat$GarageYrBlt == "NA"] <- NA
+# dat$LotFrontage[dat$LotFrontage == "NA"] <- NA
+# dat$GarageYrBlt[dat$GarageYrBlt == "NA"] <- NA
 ```
 
 
@@ -190,7 +190,9 @@ coef(glmmod)[, 15][coef(glmmod)[, 20] > 0]
 
 ### Cross validation
 ```{r}
-cv.model <- cv.glmnet(x, y, alpha=1, type.measure = "mse", nfolds = 10)
+cv.model <- cv.glmnet(x_train, y_train, 
+                      alpha=1, type.measure = "mse", nfolds = 10)
+
 (best.lambda <- cv.model$lambda.min)
 
 sqrt(cv.model$cvm[cv.model$lambda == cv.model$lambda.min])
@@ -210,14 +212,14 @@ x_test  <- data.matrix(data.frame(quants_test, factors_test))
 
 ### make predictions
 ```{r}
-pred = predict(cv.model, s=cv.model$lambda.min, newx=x)
+pred = predict(cv.model, s=cv.model$lambda.min, newx=x_test)
 head(pred)
 ```
 
 ## Elastic Net
 ### Austin messing with elastic net
 ```{r warning=FALSE}
-head(data.frame(x_test, y_test))
+head(data.frame(x_train))
 
 my_control <- trainControl(method = "repeatedcv",
                            number = 5,
@@ -225,26 +227,32 @@ my_control <- trainControl(method = "repeatedcv",
                            search = "random",
                            verboseIter = TRUE)
 
-my_elastic_net <- train(x,as.double(y),
+my_elastic_net <- train(x_train,as.double(y_train),
                         method = "glmnet",
                         preProcess = c("center", "scale"),
                         tuneLength = 25,
                         trControl = my_control)
 
-my_elastic_net$bestTune
 
 coef(my_elastic_net$finalModel, my_elastic_net$bestTune$lambda)
 ```
+
+```{r}
+my_elastic_net$results$RMSE
+```
+
 
 ```{r}
 factors_test <- model.matrix(fact_formula, data = test)[, -1]
 
 quants_test <- scale(test[, quant_idx])
 
-x  <- data.matrix(data.frame(quants_test, factors_test))
+x_test  <- data.matrix(data.frame(quants_test, factors_test))
+
+sqrt(my_elastic_net$cvm[my_elastic_net$lambda == my_elastic_net$lambda.min])
 
 
 predict(my_elastic_net$finalModel, 
         #s=my_elastic_net$bestTune$lambda, 
-        newx=x)
+        newx=x_train)
 ```
