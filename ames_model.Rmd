@@ -26,6 +26,7 @@ train <- read.csv(here("Kaggle_Data", "train.csv"), na.strings = c(""))
 test <- read.csv(here("Kaggle_Data", "test.csv"), na.strings = c(""))
 ```
 
+
 ### Pairwise plots
 Let's plot them 10 variables at a time for readability. 
 ```{r fig.height=10, fig.width=10}
@@ -64,12 +65,20 @@ test$SalePrice <- NA
 dat <- rbind(train,test)
 ```
 
+### Encode NAs
+This is an opportunity to impute the median
+```{r}
+dat$LotFrontage[dat$LotFrontage == "NA"] <- NA
+dat$GarageYrBlt[dat$GarageYrBlt == "NA"] <- NA
+```
+
 
 ### Coerce tricky vars
 These predictors are often misclassified, so we're coercing them explicitly. 
 ```{r}
-tricky_numerics <- c("BsmtUnfSF","TotalBsmtSF", "GarageYrBlt", "LotFrontage", 
-                     "MasVnrArea", "BsmtFinSF1", "BsmtFinSF2", "GarageArea")
+tricky_numerics <- c("BsmtUnfSF","TotalBsmtSF", "GarageYrBlt", 
+                     "LotFrontage", "MasVnrArea", "BsmtFinSF1", 
+                     "BsmtFinSF2", "GarageArea")
 
 for (var in tricky_numerics) {
     dat[[var]] <- as.integer(dat[[var]])
@@ -133,19 +142,21 @@ This is used for creating a model matrix.
 ```{r}
 fact_formula <- as.formula(paste("~", 
                                  paste(fact_vars, sep="", collapse= "+")))
+
+#fact_formula
 ```
 
 ### Separate data
 Get back the train and test data
 ```{r}
+library(rlist)
 # Use the flag before to separate observations
 train <- subset(dat, is_train == 1); 
 test <- subset(dat, is_train == 0)
 train$is_train <- NULL; test$is_train <- NULL
 
 # remove flag from quant indices
-#quant_idx[!quant_idx['is_train']]
-rlist::quant_idx <- list.remove(quant_idx, range = 'is_train')
+quant_idx <- list.remove(quant_idx, range = 'is_train')
 ```
 
 ### Define contrasts function
@@ -186,7 +197,7 @@ sqrt(cv.model$cvm[cv.model$lambda == cv.model$lambda.min])
 
 plot(cv.model)
 
-head(coef(cv.model))
+coef(cv.model)
 ```
 ### prep test data
 ```{r}
@@ -202,8 +213,9 @@ x  <- data.matrix(data.frame(quants_test, factors_test))
 pred = predict(cv.model, s=cv.model$lambda.min, newx=x)
 head(pred)
 ```
+
 ## Elastic Net
-## Austin messing with elastic net
+### Austin messing with elastic net
 ```{r warning=FALSE}
 factors_train <- model.matrix(fact_formula, data = train)
 
