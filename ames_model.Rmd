@@ -213,7 +213,7 @@ x_test  <- data.matrix(data.frame(quants_test, factors_test))
 ### make predictions
 ```{r}
 pred = predict(cv.model, s=cv.model$lambda.min, newx=x_test)
-head(pred)
+head(pred, 15)
 ```
 
 ## Elastic Net
@@ -222,8 +222,8 @@ head(pred)
 head(data.frame(x_train))
 
 my_control <- trainControl(method = "repeatedcv",
-                           number = 5,
-                           repeats = 1,
+                           number = 10,
+                           repeats = 3,
                            search = "random",
                            verboseIter = TRUE)
 
@@ -233,26 +233,25 @@ my_elastic_net <- train(x_train,as.double(y_train),
                         tuneLength = 25,
                         trControl = my_control)
 
-
 coef(my_elastic_net$finalModel, my_elastic_net$bestTune$lambda)
 ```
 
 ```{r}
 my_elastic_net$results$RMSE
+plot(my_elastic_net)
 ```
 
 
 ```{r}
-factors_test <- model.matrix(fact_formula, data = test)[, -1]
+factors_test <- model.matrix(fact_formula, data = test)
 
 quants_test <- scale(test[, quant_idx])
 
 x_test  <- data.matrix(data.frame(quants_test, factors_test))
 
-sqrt(my_elastic_net$cvm[my_elastic_net$lambda == my_elastic_net$lambda.min])
+preds <- predict(my_elastic_net$finalModel, 
+        s=my_elastic_net$bestTune$lambda, 
+        newx=x_test)
 
-
-predict(my_elastic_net$finalModel, 
-        #s=my_elastic_net$bestTune$lambda, 
-        newx=x_train)
+write.csv(data.frame(preds), row.names = T, file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions.csv")
 ```
