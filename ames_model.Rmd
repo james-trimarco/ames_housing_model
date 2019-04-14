@@ -27,6 +27,7 @@ test <- read.csv(here("Kaggle_Data", "test.csv"), na.strings = c(""))
 ```
 
 ### Pairwise plots
+Let's plot them 10 variables at a time for readability. 
 ```{r fig.height=10, fig.width=10}
 # idx <- unlist(list(81, 1:10))
 # pairs(train[idx])
@@ -41,6 +42,15 @@ test <- read.csv(here("Kaggle_Data", "test.csv"), na.strings = c(""))
 # pairs(train[idx])
 # 
 # idx <- unlist(list(81, 41:50))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 51:60))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 61:70))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 71:80))
 # pairs(train[idx])
 ```
 
@@ -71,14 +81,26 @@ for (var in tricky_factors) {
     dat[[var]] <- as.factor(dat[[var]])
 }
 ```
+### Inspect a few histograms
+Data is not normally distributed. 
+```{r}
+hist(train$GarageYrBlt)
+```
 
 ### Add polynomial vars
 ```{r polynomial}
 LotArea_SQ <- dat$LotArea**2
 YearBuilt_SQ <- dat$YearBuilt**2
-
-dat <- cbind(dat, YearBuilt_SQ, LotArea_SQ)
-#str(dat)
+YearRemodAdd_SQ <- dat$YearRemodAdd**2
+BsmtFinSF1_SQ <- dat$BsmtFinSF1**2
+BsmtFinSF2_SQ <- dat$BsmtFinSF2**2
+X2ndFlrSF_SQ <- dat$X2ndFlrSF**2
+GrLivArea_SQ <- dat$GrLivArea**2
+LotFrontage_SQ <- dat$LotFrontage**2
+    
+dat <- cbind(dat, LotArea_SQ, YearBuilt_SQ, YearRemodAdd_SQ, 
+             BsmtFinSF1_SQ, BsmtFinSF2_SQ, X2ndFlrSF_SQ, GrLivArea_SQ,
+             LotFrontage_SQ)
 ```
 
 
@@ -176,8 +198,8 @@ x  <- data.matrix(data.frame(quants_test, factors_test))
 pred = predict(cv.model, s=cv.model$lambda.min, newx=x)
 head(pred)
 ```
-
-### Austin messing with elastic net
+## Elastic Net
+## Austin messing with elastic net
 ```{r}
 factors_train <- model.matrix(fact_formula, data = train)[, -1]
 
