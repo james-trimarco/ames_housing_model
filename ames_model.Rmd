@@ -261,12 +261,18 @@ x_test[na_idx_2, ][is.na(x_test[na_idx_2, ])] <- 0
 ### make predictions
 ```{r}
 preds_l = predict(cv.model, s=cv.model$lambda.min, newx=x_test)
+sum(is.na(preds_l)) # this must be 0
 head(preds_l, 15)
 ```
 
 ### write lasso-only csv
 ```{r}
-write.csv(data.frame(preds_l), row.names = T, file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions_l.csv")
+preds_l <- data.frame(preds_l) %>% rownames_to_column()
+colnames(preds_l) <- c("Id", "SalePrice")
+head(preds_l, 3)
+
+write.csv(preds_l, row.names = F, 
+          file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions_l.csv")
 ```
 
 ## Elastic Net
@@ -295,7 +301,7 @@ my_elastic_net$results$RMSE
 plot(my_elastic_net)
 ```
 
-
+### Make predictions
 ```{r}
 factors_test <- model.matrix(fact_formula, data = test)
 
@@ -303,9 +309,17 @@ quants_test <- scale(test[, quant_idx])
 
 x_test  <- data.matrix(data.frame(quants_test, factors_test))
 
-preds <- predict(my_elastic_net$finalModel, 
+preds_e <- predict(my_elastic_net$finalModel, 
         s=my_elastic_net$bestTune$lambda, 
         newx=x_test)
+```
 
-write.csv(data.frame(preds), row.names = T, file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions.csv")
+### Write elasticnet csv
+```{r}
+preds_e <- data.frame(preds) %>% rownames_to_column()
+colnames(preds_e) <- c("Id", "SalePrice")
+head(preds_e, 3)
+
+write.csv(preds_e, row.names = F, 
+          file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions_e.csv")
 ```
