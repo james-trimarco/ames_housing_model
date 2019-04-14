@@ -1,6 +1,6 @@
 ---
 title: "Untitled"
-author: "James Trimarco"
+author: "Austin Anderson, Gregory Barber, James Trimarco"
 date: "4/13/2019"
 output: html_document
 ---
@@ -15,19 +15,15 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(glmnet)
 library(caret)
+library(rstudioapi)
+library(here)
 ```
 
 ### Read in data from csv files
 ```{r, warning=FALSE}
-# Optaining string of data directory
-file_directory <- dirname(rstudioapi::getActiveDocumentContext()$path)
-file_directory <- glue::glue(file_directory, "/Kaggle_Data")
+train <- read.csv(here("Kaggle_Data", "train.csv"), na.strings = c(""))
 
-# Setting working directory
-setwd(file_directory)
-train <- read.csv("train.csv", na.strings = c(""))
-
-test <- read.csv("test.csv", na.strings = c(""))
+test <- read.csv(here("Kaggle_Data", "test.csv"), na.strings = c(""))
 ```
 
 ### Pairwise plots
@@ -77,12 +73,12 @@ for (var in tricky_factors) {
 ```
 
 ### Add polynomial vars
-```{r}
+```{r polynomial}
 LotArea_SQ <- dat$LotArea**2
 YearBuilt_SQ <- dat$YearBuilt**2
 
 dat <- cbind(dat, YearBuilt_SQ, LotArea_SQ)
-str(dat)
+#str(dat)
 ```
 
 
@@ -93,17 +89,20 @@ Question: Where best to remove ID column?
 ```{r}
 fact_idx <- sapply(dat, function(x) is.factor(x))   
 fact_vars <- names(dat[fact_idx])
-fact_vars
+#fact_vars
 
-numeric_idx <- sapply(dat, function(x) is.numeric(x))
-numeric_idx[c("is_train", "Id", "SalePrice")] <- FALSE # take out ids, flags, response
-numeric_vars <- names(dat[numeric_idx])
-numeric_vars
+quant_idx <- sapply(dat, function(x) is.numeric(x))
+quant_idx[c("is_train", "Id", "SalePrice")] <- FALSE # take out ids, flags, response
+quant_vars <- names(dat[quant_idx])
+#numeric_vars
+```
 
-# check the levels of var_b and var_e in this consolidated, train and test data sets
+### Test a few factors for length
+```{r}
+# check the levels a few vars in this consolidated, train and test data sets
 length(levels(dat$Alley)); length(unique(train$Alley));
-
-length(levels(dat$HouseStyle)); length(unique(dat$HouseStyle))
+# Here's why we need to join train and test data
+length(levels(dat$HouseStyle)); length(unique(test$HouseStyle))
 ```
 
 ### Create formula
@@ -132,19 +131,18 @@ contr.Dummy <- function(contrasts, ...){
 options(contrasts=c(ordered='contr.Dummy', unordered='contr.Dummy'))
 ```
 
-### Create xfactors
+### Create factors
 This matrix contains only the factors. The numerical data is accessed separately.
 ```{r}
-xfactors_train <- model.matrix(fact_formula, data = train)[, -1]
+factors_train <- model.matrix(fact_formula, data = train)[, -1]
 ```
 
 ## Fit on train data
 ```{r}
-#sapply(train[, numeric_idx], function(x) is.numeric(x))
-numeric_idx <- numeric_idx[-(grep("is_train", names(numeric_idx)))]
-numbers <- scale(train[, numeric_idx])
+quant_idx <- quant_idx[-(grep("is_train", names(quant_idx)))]
+quants_train <- scale(train[, quant_idx])
 
-x  <- data.matrix(data.frame(numbers, xfactors_train))
+x  <- data.matrix(data.frame(quants_train, factors_train))
 y <- data.matrix(train$SalePrice)
 
 glmmod <- glmnet(x, y, alpha=1, family="gaussian")
@@ -166,11 +164,11 @@ coef(cv.model)
 ```
 ### prep test data
 ```{r}
-xfactors_test <- model.matrix(fact_formula, data = test)[, -1]
+factors_test <- model.matrix(fact_formula, data = test)[, -1]
 #sapply(train[, numeric_idx], function(x) is.numeric(x))
-numbers <- scale(test[, numeric_idx])
+quants_test <- scale(test[, quant_idx])
 
-x  <- data.matrix(data.frame(numbers, xfactors_test))
+x  <- data.matrix(data.frame(quants_test, factors_test))
 ```
 
 ### make predictions
@@ -181,13 +179,12 @@ head(pred)
 
 ### Austin messing with elastic net
 ```{r}
+factors_train <- model.matrix(fact_formula, data = train)[, -1]
 
-xfactors_train <- model.matrix(fact_formula, data = train)[, -1]
+quant_idx <- quant_idx[-(grep("is_train", names(quant_idx)))]
+numbers <- scale(train[, quant_idx])
 
-numeric_idx <- numeric_idx[-(grep("is_train", names(numeric_idx)))]
-numbers <- scale(train[, numeric_idx])
-
-x  <- data.matrix(data.frame(numbers, xfactors_train))
+x  <- data.matrix(data.frame(numbers, factors_train))
 y <- data.matrix(train$SalePrice)
 
 head(data.frame(x,y))
@@ -211,11 +208,11 @@ coef(my_elastic_net$finalModel, my_elastic_net$bestTune$lambda)
 ```
 
 ```{r}
-xfactors_test <- model.matrix(fact_formula, data = test)[, -1]
-#sapply(train[, numeric_idx], function(x) is.numeric(x))
-numbers <- scale(test[, numeric_idx])
+factors_test <- model.matrix(fact_formula, data = test)[, -1]
 
-x  <- data.matrix(data.frame(numbers, xfactors_test))
+quants_test <- scale(test[, quant_idx])
+
+x  <- data.matrix(data.frame(quants_test, factors_test))
 
 predict(my_elastic_net$finalModel,newx=x)
 
