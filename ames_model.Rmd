@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Ames SalePrice Model"
 author: "Austin Anderson, Gregory Barber, James Trimarco"
 date: "4/13/2019"
 output: html_document
