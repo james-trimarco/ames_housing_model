@@ -24,8 +24,9 @@ library(here)
 train <- read.csv(here("Kaggle_Data", "train.csv"), na.strings = c(""))
 
 test <- read.csv(here("Kaggle_Data", "test.csv"), na.strings = c(""))
-```
 
+#head(test)
+```
 
 ### Pairwise plots
 Let's plot them 10 variables at a time for readability. 
@@ -58,10 +59,13 @@ Let's plot them 10 variables at a time for readability.
 ### Bind train and test data
 This step ensures that all factors have the same number of levels in both training and test sets. 
 ```{r}
-# consolidate the 2 data sets after creating a variable indicating train / test 
+# create flag used to separate train and test sets after factorization
 train$is_train <- 1; 
 test$is_train <- 0
 test$SalePrice <- NA
+
+head(is.na(train$Alley))
+
 dat <- rbind(train,test)
 ```
 
@@ -74,7 +78,7 @@ This is an opportunity to impute the median
 
 
 ### Coerce tricky vars
-These predictors are often misclassified, so we're coercing them explicitly. 
+These predictors are often misclassified, so we're coercing them explicitly. The NAs introduced by coercion here are correct. 
 ```{r}
 tricky_numerics <- c("BsmtUnfSF","TotalBsmtSF", "GarageYrBlt", 
                      "LotFrontage", "MasVnrArea", "BsmtFinSF1", 
@@ -92,9 +96,15 @@ for (var in tricky_factors) {
 ```
 
 ### Inspect a few histograms
-Data is not normally distributed. 
+Note: The data is not normally distributed along some predictors. 
 ```{r}
-hist(dat$GarageYrBlt)
+ggplot(dat, aes(x = GarageYrBlt)) +
+    geom_histogram() +
+    labs(title = "GarageYrBlt")
+
+ggplot(dat, aes(x = LotArea)) +
+    geom_histogram() +
+    labs(title = "LotArea")
 ```
 
 ### Add polynomial vars
@@ -111,6 +121,8 @@ LotFrontage_SQ <- dat$LotFrontage**2
 dat <- cbind(dat, LotArea_SQ, YearBuilt_SQ, YearRemodAdd_SQ, 
              BsmtFinSF1_SQ, BsmtFinSF2_SQ, X2ndFlrSF_SQ, GrLivArea_SQ,
              LotFrontage_SQ)
+
+head(dat)
 ```
 
 
@@ -127,13 +139,15 @@ quant_idx <- sapply(dat, function(x) is.numeric(x))
 quant_idx[c("is_train", "Id", "SalePrice")] <- FALSE # take out ids, flags, response
 quant_vars <- names(dat[quant_idx])
 #numeric_vars
+
+
+
 ```
 
 ### Test a few factors for length
+Some are longer in the train data than in the test data
 ```{r}
 # check the levels a few vars in this consolidated, train and test data sets
-length(levels(dat$Alley)); length(unique(train$Alley));
-# Here's why we need to join train and test data
 length(levels(dat$HouseStyle)); length(unique(test$HouseStyle))
 ```
 
@@ -157,6 +171,9 @@ train$is_train <- NULL; test$is_train <- NULL
 
 # remove flag from quant indices
 quant_idx <- list.remove(quant_idx, range = 'is_train')
+
+# Confirm that factor levels are now equal
+length(levels(train$HouseStyle));length(levels(test$HouseStyle))
 ```
 
 ### Define contrasts function
@@ -173,11 +190,13 @@ options(contrasts=c(ordered='contr.Dummy', unordered='contr.Dummy'))
 This matrix contains only the factors. The numerical data is accessed separately.
 ```{r}
 factors_train <- model.matrix(fact_formula, data = train)
+head(factors_train)[, 5]
 ```
 
 ## Fit on train data
 ```{r}
 quants_train <- scale(train[, quant_idx])
+#quants_train <- train[, quant_idx]
 
 x_train  <- data.matrix(data.frame(quants_train, factors_train))
 y_train <- data.matrix(train$SalePrice)
@@ -195,29 +214,63 @@ cv.model <- cv.glmnet(x_train, y_train,
 
 (best.lambda <- cv.model$lambda.min)
 
-sqrt(cv.model$cvm[cv.model$lambda == cv.model$lambda.min])
-
 plot(cv.model)
 
 coef(cv.model)
 ```
+
 ### prep test data
 ```{r}
 factors_test <- model.matrix(fact_formula, data = test)
 
 quants_test <- scale(test[, quant_idx])
+#quants_test <- test[, quant_idx]
 
 x_test  <- data.matrix(data.frame(quants_test, factors_test))
 ```
 
+### ::troubleshoot:: find bad rows in test data
+```{r}
+# x_test  <- data.matrix(data.frame(quants_test, factors_test))
+# 
+# na_idx <- 2121-1460
+# na_idx_2 <- 2577-1460
+# #x_train[1, ]
+# quants_test[na_idx, ]
+# factors_test[na_idx, ]
+# sum(is.na(x_test[na_idx, ]))
+# sum(is.na(x_test[na_idx_2, ]))
+# sum(is.na(x_test[na_idx+1, ]))
+# sum(is.na(x_test[na_idx-1, ]))
+# sum(is.na(x_test[na_idx_2+1, ]))
+# sum(is.na(x_test[na_idx_2-1, ]))
+# 
+# x_test[na_idx, ][1:25]
+# x_test[na_idx+1, ][1:15]
+```
+
+### fix the bad rows
+```{r}
+na_idx <- 2121 - 1460
+na_idx_2 <- 2577 - 1460
+
+x_test[na_idx, ][is.na(x_test[na_idx, ])] <- 0
+x_test[na_idx_2, ][is.na(x_test[na_idx_2, ])] <- 0
+```
+
 ### make predictions
 ```{r}
-pred = predict(cv.model, s=cv.model$lambda.min, newx=x_test)
-head(pred, 15)
+preds_l = predict(cv.model, s=cv.model$lambda.min, newx=x_test)
+head(preds_l, 15)
+```
+
+### write lasso-only csv
+```{r}
+write.csv(data.frame(preds_l), row.names = T, file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions_l.csv")
 ```
 
 ## Elastic Net
-### Austin messing with elastic net
+### Apply elastic net
 ```{r warning=FALSE}
 head(data.frame(x_train))
 
@@ -236,6 +289,7 @@ my_elastic_net <- train(x_train,as.double(y_train),
 coef(my_elastic_net$finalModel, my_elastic_net$bestTune$lambda)
 ```
 
+##
 ```{r}
 my_elastic_net$results$RMSE
 plot(my_elastic_net)
