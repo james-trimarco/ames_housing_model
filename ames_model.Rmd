@@ -1,6 +1,6 @@
 ---
-title: "Untitled"
-author: "James Trimarco"
+title: "Ames SalePrice Model"
+author: "Austin Anderson, Gregory Barber, James Trimarco"
 date: "4/13/2019"
 output: html_document
 ---
@@ -15,22 +15,21 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(glmnet)
 library(caret)
+library(rstudioapi)
+library(here)
 ```
 
 ### Read in data from csv files
 ```{r, warning=FALSE}
-# Optaining string of data directory
-file_directory <- dirname(rstudioapi::getActiveDocumentContext()$path)
-file_directory <- glue::glue(file_directory, "/Kaggle_Data")
+train <- read.csv(here("Kaggle_Data", "train.csv"), na.strings = c(""))
 
-# Setting working directory
-setwd(file_directory)
-train <- read.csv("train.csv", na.strings = c(""))
+test <- read.csv(here("Kaggle_Data", "test.csv"), na.strings = c(""))
 
-test <- read.csv("test.csv", na.strings = c(""))
+#head(test)
 ```
 
 ### Pairwise plots
+Let's plot them 10 variables at a time for readability. 
 ```{r fig.height=10, fig.width=10}
 # idx <- unlist(list(81, 1:10))
 # pairs(train[idx])
@@ -46,24 +45,44 @@ test <- read.csv("test.csv", na.strings = c(""))
 # 
 # idx <- unlist(list(81, 41:50))
 # pairs(train[idx])
+# 
+# idx <- unlist(list(81, 51:60))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 61:70))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 71:80))
+# pairs(train[idx])
 ```
 
 ### Bind train and test data
 This step ensures that all factors have the same number of levels in both training and test sets. 
 ```{r}
-# consolidate the 2 data sets after creating a variable indicating train / test 
+# create flag used to separate train and test sets after factorization
 train$is_train <- 1; 
 test$is_train <- 0
 test$SalePrice <- NA
+
+head(is.na(train$Alley))
+
 dat <- rbind(train,test)
+```
+
+### Encode NAs
+This is an opportunity to impute the median
+```{r}
+# dat$LotFrontage[dat$LotFrontage == "NA"] <- NA
+# dat$GarageYrBlt[dat$GarageYrBlt == "NA"] <- NA
 ```
 
 
 ### Coerce tricky vars
-These predictors are often misclassified, so we're coercing them explicitly. 
+These predictors are often misclassified, so we're coercing them explicitly. The NAs introduced by coercion here are correct. 
 ```{r}
-tricky_numerics <- c("BsmtUnfSF","TotalBsmtSF", "GarageYrBlt", "LotFrontage", 
-                     "MasVnrArea", "BsmtFinSF1", "BsmtFinSF2", "GarageArea")
+tricky_numerics <- c("BsmtUnfSF","TotalBsmtSF", "GarageYrBlt", 
+                     "LotFrontage", "MasVnrArea", "BsmtFinSF1", 
+                     "BsmtFinSF2", "GarageArea")
 
 for (var in tricky_numerics) {
     dat[[var]] <- as.integer(dat[[var]])
@@ -76,13 +95,34 @@ for (var in tricky_factors) {
 }
 ```
 
-### Add polynomial vars
+### Inspect a few histograms
+Note: The data is not normally distributed along some predictors. 
 ```{r}
+ggplot(dat, aes(x = GarageYrBlt)) +
+    geom_histogram() +
+    labs(title = "GarageYrBlt")
+
+ggplot(dat, aes(x = LotArea)) +
+    geom_histogram() +
+    labs(title = "LotArea")
+```
+
+### Add polynomial vars
+```{r polynomial}
 LotArea_SQ <- dat$LotArea**2
 YearBuilt_SQ <- dat$YearBuilt**2
+YearRemodAdd_SQ <- dat$YearRemodAdd**2
+BsmtFinSF1_SQ <- dat$BsmtFinSF1**2
+BsmtFinSF2_SQ <- dat$BsmtFinSF2**2
+X2ndFlrSF_SQ <- dat$X2ndFlrSF**2
+GrLivArea_SQ <- dat$GrLivArea**2
+LotFrontage_SQ <- dat$LotFrontage**2
+    
+dat <- cbind(dat, LotArea_SQ, YearBuilt_SQ, YearRemodAdd_SQ, 
+             BsmtFinSF1_SQ, BsmtFinSF2_SQ, X2ndFlrSF_SQ, GrLivArea_SQ,
+             LotFrontage_SQ)
 
-dat <- cbind(dat, YearBuilt_SQ, LotArea_SQ)
-str(dat)
+head(dat)
 ```
 
 
@@ -93,17 +133,22 @@ Question: Where best to remove ID column?
 ```{r}
 fact_idx <- sapply(dat, function(x) is.factor(x))   
 fact_vars <- names(dat[fact_idx])
-fact_vars
+#fact_vars
 
-numeric_idx <- sapply(dat, function(x) is.numeric(x))
-numeric_idx[c("is_train", "Id", "SalePrice")] <- FALSE # take out ids, flags, response
-numeric_vars <- names(dat[numeric_idx])
-numeric_vars
+quant_idx <- sapply(dat, function(x) is.numeric(x))
+quant_idx[c("is_train", "Id", "SalePrice")] <- FALSE # take out ids, flags, response
+quant_vars <- names(dat[quant_idx])
+#numeric_vars
 
-# check the levels of var_b and var_e in this consolidated, train and test data sets
-length(levels(dat$Alley)); length(unique(train$Alley));
 
-length(levels(dat$HouseStyle)); length(unique(dat$HouseStyle))
+
+```
+
+### Test a few factors for length
+Some are longer in the train data than in the test data
+```{r}
+# check the levels a few vars in this consolidated, train and test data sets
+length(levels(dat$HouseStyle)); length(unique(test$HouseStyle))
 ```
 
 ### Create formula
@@ -111,15 +156,24 @@ This is used for creating a model matrix.
 ```{r}
 fact_formula <- as.formula(paste("~", 
                                  paste(fact_vars, sep="", collapse= "+")))
+
+#fact_formula
 ```
 
 ### Separate data
 Get back the train and test data
 ```{r}
+library(rlist)
 # Use the flag before to separate observations
 train <- subset(dat, is_train == 1); 
 test <- subset(dat, is_train == 0)
 train$is_train <- NULL; test$is_train <- NULL
+
+# remove flag from quant indices
+quant_idx <- list.remove(quant_idx, range = 'is_train')
+
+# Confirm that factor levels are now equal
+length(levels(train$HouseStyle));length(levels(test$HouseStyle))
 ```
 
 ### Define contrasts function
@@ -132,91 +186,135 @@ contr.Dummy <- function(contrasts, ...){
 options(contrasts=c(ordered='contr.Dummy', unordered='contr.Dummy'))
 ```
 
-### Create xfactors
+### Create factors
 This matrix contains only the factors. The numerical data is accessed separately.
 ```{r}
-xfactors_train <- model.matrix(fact_formula, data = train)[, -1]
+factors_train <- model.matrix(fact_formula, data = train)
+head(factors_train)[, 5]
 ```
 
 ## Fit on train data
 ```{r}
-#sapply(train[, numeric_idx], function(x) is.numeric(x))
-numeric_idx <- numeric_idx[-(grep("is_train", names(numeric_idx)))]
-numbers <- scale(train[, numeric_idx])
+quants_train <- scale(train[, quant_idx])
+#quants_train <- train[, quant_idx]
 
-x  <- data.matrix(data.frame(numbers, xfactors_train))
-y <- data.matrix(train$SalePrice)
+x_train  <- data.matrix(data.frame(quants_train, factors_train))
+y_train <- data.matrix(train$SalePrice)
 
-glmmod <- glmnet(x, y, alpha=1, family="gaussian")
+glmmod <- glmnet(x_train, y_train, alpha=1, family="gaussian")
 plot(glmmod)
 
-coef(glmmod)[, 15][coef(glmmod)[, 15] > 0]
+coef(glmmod)[, 15][coef(glmmod)[, 20] > 0]
 ```
 
 ### Cross validation
 ```{r}
-cv.model <- cv.glmnet(x, y, alpha=1, type.measure = "mse", nfolds = 10)
-(best.lambda <- cv.model$lambda.min)
+cv.model <- cv.glmnet(x_train, y_train, 
+                      alpha=1, type.measure = "mse", nfolds = 10)
 
-sqrt(cv.model$cvm[cv.model$lambda == cv.model$lambda.min])
+(best.lambda <- cv.model$lambda.min)
 
 plot(cv.model)
 
 coef(cv.model)
 ```
+
 ### prep test data
 ```{r}
-xfactors_test <- model.matrix(fact_formula, data = test)[, -1]
-#sapply(train[, numeric_idx], function(x) is.numeric(x))
-numbers <- scale(test[, numeric_idx])
+factors_test <- model.matrix(fact_formula, data = test)
 
-x  <- data.matrix(data.frame(numbers, xfactors_test))
+quants_test <- scale(test[, quant_idx])
+#quants_test <- test[, quant_idx]
+
+x_test  <- data.matrix(data.frame(quants_test, factors_test))
+```
+
+### ::troubleshoot:: find bad rows in test data
+```{r}
+# x_test  <- data.matrix(data.frame(quants_test, factors_test))
+# 
+# na_idx <- 2121-1460
+# na_idx_2 <- 2577-1460
+# #x_train[1, ]
+# quants_test[na_idx, ]
+# factors_test[na_idx, ]
+# sum(is.na(x_test[na_idx, ]))
+# sum(is.na(x_test[na_idx_2, ]))
+# sum(is.na(x_test[na_idx+1, ]))
+# sum(is.na(x_test[na_idx-1, ]))
+# sum(is.na(x_test[na_idx_2+1, ]))
+# sum(is.na(x_test[na_idx_2-1, ]))
+# 
+# x_test[na_idx, ][1:25]
+# x_test[na_idx+1, ][1:15]
+```
+
+### fix the bad rows
+```{r}
+na_idx <- 2121 - 1460
+na_idx_2 <- 2577 - 1460
+
+x_test[na_idx, ][is.na(x_test[na_idx, ])] <- 0
+x_test[na_idx_2, ][is.na(x_test[na_idx_2, ])] <- 0
 ```
 
 ### make predictions
 ```{r}
-pred = predict(cv.model, s=cv.model$lambda.min, newx=x)
-head(pred)
+preds_l = predict(cv.model, s=cv.model$lambda.min, newx=x_test)
+sum(is.na(preds_l)) # this must be 0
+head(preds_l, 15)
 ```
 
-### Austin messing with elastic net
+### write lasso-only csv
 ```{r}
+preds_l <- data.frame(preds_l) %>% rownames_to_column()
+colnames(preds_l) <- c("Id", "SalePrice")
+head(preds_l, 3)
 
-xfactors_train <- model.matrix(fact_formula, data = train)[, -1]
+write.csv(preds_l, row.names = F, 
+          file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions_l.csv")
+```
 
-numeric_idx <- numeric_idx[-(grep("is_train", names(numeric_idx)))]
-numbers <- scale(train[, numeric_idx])
-
-x  <- data.matrix(data.frame(numbers, xfactors_train))
-y <- data.matrix(train$SalePrice)
-
-head(data.frame(x,y))
+## Elastic Net
+### Apply elastic net
+```{r warning=FALSE}
+head(data.frame(x_train))
 
 my_control <- trainControl(method = "repeatedcv",
-                           number = 5,
-                           repeats = 1,
+                           number = 10,
+                           repeats = 3,
                            search = "random",
-                           verboseIter = TRUE)
+                           verboseIter = TRUE, 
+                        allowParallel = TRUE)
 
-my_elastic_net <- train(x,as.double(y),
+my_elastic_net <- train(x_train,as.double(y_train),
                         method = "glmnet",
                         preProcess = c("center", "scale"),
                         tuneLength = 25,
                         trControl = my_control)
 
-my_elastic_net$bestTune
-
 coef(my_elastic_net$finalModel, my_elastic_net$bestTune$lambda)
-
 ```
 
+## Examine elastic plot
 ```{r}
-xfactors_test <- model.matrix(fact_formula, data = test)[, -1]
-#sapply(train[, numeric_idx], function(x) is.numeric(x))
-numbers <- scale(test[, numeric_idx])
+my_elastic_net$results$RMSE
+plot(my_elastic_net)
+```
 
-x  <- data.matrix(data.frame(numbers, xfactors_test))
+### Make predictions
+```{r}
+preds_e <- predict(my_elastic_net$finalModel, 
+        s=my_elastic_net$bestTune$lambda, 
+        newx=x_test)
+```
 
-predict(my_elastic_net$finalModel,newx=x)
+### Write elasticnet csv
+```{r}
+preds_e <- data.frame(preds) %>% rownames_to_column()
+colnames(preds_e) <- c("Id", "SalePrice")
+head(preds_e, 3)
 
+write.csv(preds_e, row.names = F, 
+          file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions_e.csv")
 ```
