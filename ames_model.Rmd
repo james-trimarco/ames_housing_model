@@ -179,10 +179,10 @@ factors_train <- model.matrix(fact_formula, data = train)
 ```{r}
 quants_train <- scale(train[, quant_idx])
 
-x  <- data.matrix(data.frame(quants_train, factors_train))
-y <- data.matrix(train$SalePrice)
+x_train  <- data.matrix(data.frame(quants_train, factors_train))
+y_train <- data.matrix(train$SalePrice)
 
-glmmod <- glmnet(x, y, alpha=1, family="gaussian")
+glmmod <- glmnet(x_train, y_train, alpha=1, family="gaussian")
 plot(glmmod)
 
 coef(glmmod)[, 15][coef(glmmod)[, 20] > 0]
@@ -205,7 +205,7 @@ factors_test <- model.matrix(fact_formula, data = test)
 
 quants_test <- scale(test[, quant_idx])
 
-x  <- data.matrix(data.frame(quants_test, factors_test))
+x_test  <- data.matrix(data.frame(quants_test, factors_test))
 ```
 
 ### make predictions
@@ -217,14 +217,7 @@ head(pred)
 ## Elastic Net
 ### Austin messing with elastic net
 ```{r warning=FALSE}
-factors_train <- model.matrix(fact_formula, data = train)
-
-quants_train <- scale(train[, quant_idx])
-
-x  <- data.matrix(data.frame(quants_train, factors_train))
-y <- data.matrix(train$SalePrice)
-
-head(data.frame(x,y))
+head(data.frame(x_test, y_test))
 
 my_control <- trainControl(method = "repeatedcv",
                            number = 5,
