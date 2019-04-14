@@ -81,10 +81,11 @@ for (var in tricky_factors) {
     dat[[var]] <- as.factor(dat[[var]])
 }
 ```
+
 ### Inspect a few histograms
 Data is not normally distributed. 
 ```{r}
-hist(train$GarageYrBlt)
+hist(dat$GarageYrBlt)
 ```
 
 ### Add polynomial vars
@@ -170,7 +171,7 @@ y <- data.matrix(train$SalePrice)
 glmmod <- glmnet(x, y, alpha=1, family="gaussian")
 plot(glmmod)
 
-coef(glmmod)[, 15][coef(glmmod)[, 15] > 0]
+coef(glmmod)[, 15][coef(glmmod)[, 20] > 0]
 ```
 
 ### Cross validation
@@ -226,7 +227,6 @@ my_elastic_net <- train(x,as.double(y),
 my_elastic_net$bestTune
 
 coef(my_elastic_net$finalModel, my_elastic_net$bestTune$lambda)
-
 ```
 
 ```{r}
@@ -236,6 +236,8 @@ quants_test <- scale(test[, quant_idx])
 
 x  <- data.matrix(data.frame(quants_test, factors_test))
 
-predict(my_elastic_net$finalModel,newx=x)
 
+predict(my_elastic_net$finalModel, 
+        s=my_elastic_net$bestTune$lambda, 
+        newx=x)
 ```
