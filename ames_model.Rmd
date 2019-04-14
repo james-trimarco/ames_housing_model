@@ -142,6 +142,10 @@ Get back the train and test data
 train <- subset(dat, is_train == 1); 
 test <- subset(dat, is_train == 0)
 train$is_train <- NULL; test$is_train <- NULL
+
+# remove flag from quant indices
+#quant_idx[!quant_idx['is_train']]
+rlist::quant_idx <- list.remove(quant_idx, range = 'is_train')
 ```
 
 ### Define contrasts function
@@ -162,7 +166,6 @@ factors_train <- model.matrix(fact_formula, data = train)
 
 ## Fit on train data
 ```{r}
-quant_idx <- quant_idx[-(grep("is_train", names(quant_idx)))]
 quants_train <- scale(train[, quant_idx])
 
 x  <- data.matrix(data.frame(quants_train, factors_train))
@@ -183,7 +186,7 @@ sqrt(cv.model$cvm[cv.model$lambda == cv.model$lambda.min])
 
 plot(cv.model)
 
-coef(cv.model)
+head(coef(cv.model))
 ```
 ### prep test data
 ```{r}
@@ -201,13 +204,12 @@ head(pred)
 ```
 ## Elastic Net
 ## Austin messing with elastic net
-```{r}
-factors_train <- model.matrix(fact_formula, data = train)[, -1]
+```{r warning=FALSE}
+factors_train <- model.matrix(fact_formula, data = train)
 
-quant_idx <- quant_idx[-(grep("is_train", names(quant_idx)))]
-numbers <- scale(train[, quant_idx])
+quants_train <- scale(train[, quant_idx])
 
-x  <- data.matrix(data.frame(numbers, factors_train))
+x  <- data.matrix(data.frame(quants_train, factors_train))
 y <- data.matrix(train$SalePrice)
 
 head(data.frame(x,y))
@@ -238,6 +240,6 @@ x  <- data.matrix(data.frame(quants_test, factors_test))
 
 
 predict(my_elastic_net$finalModel, 
-        s=my_elastic_net$bestTune$lambda, 
+        #s=my_elastic_net$bestTune$lambda, 
         newx=x)
 ```
