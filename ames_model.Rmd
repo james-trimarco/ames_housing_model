@@ -284,7 +284,8 @@ my_control <- trainControl(method = "repeatedcv",
                            number = 10,
                            repeats = 3,
                            search = "random",
-                           verboseIter = TRUE)
+                           verboseIter = TRUE, 
+                        allowParallel = TRUE)
 
 my_elastic_net <- train(x_train,as.double(y_train),
                         method = "glmnet",
@@ -295,7 +296,7 @@ my_elastic_net <- train(x_train,as.double(y_train),
 coef(my_elastic_net$finalModel, my_elastic_net$bestTune$lambda)
 ```
 
-##
+## Examine elastic plot
 ```{r}
 my_elastic_net$results$RMSE
 plot(my_elastic_net)
@@ -303,12 +304,6 @@ plot(my_elastic_net)
 
 ### Make predictions
 ```{r}
-factors_test <- model.matrix(fact_formula, data = test)
-
-quants_test <- scale(test[, quant_idx])
-
-x_test  <- data.matrix(data.frame(quants_test, factors_test))
-
 preds_e <- predict(my_elastic_net$finalModel, 
         s=my_elastic_net$bestTune$lambda, 
         newx=x_test)
