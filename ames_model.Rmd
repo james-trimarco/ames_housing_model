@@ -195,6 +195,36 @@ quantile(dat$LotArea)
 #     summarize(median = median(SalePrice, na.rm = T))
 ```
 
+```{r}
+plots <- list()
+idx <- 0
+for (var in quant_vars){
+  idx <- idx + 1
+
+  p <- ggplot(dat, aes_string(x = var, y = "SalePrice")) +
+    theme_minimal() +
+    scale_y_continuous(labels = scales::dollar) +
+    geom_point(alpha = .15)
+
+  plots[idx] <- list(p)
+  plots[[idx]]
+}
+
+plots[[3]]
+```
+
+```{r}
+
+for (var in quant_vars){
+dat_2 <- dat[dat[,var] > quantile(dat[,var], .25, na.rm = TRUE) - 1.5*IQR(dat[,var], na.rm = TRUE) & dat[,var] < quantile(dat[,var], .75, na.rm = TRUE) + 1.5*IQR(dat[,var], na.rm = TRUE),]
+}
+
+```
+
+```{r}
+dat_2 <- dat[dat[,var] > quantile(dat[,var], .25, na.rm = TRUE) - 1.5*IQR(dat[,var], na.rm = TRUE),]
+```
+
 ### Test a few factors for length
 Some are longer in the train data than in the test data. 
 ```{r}
