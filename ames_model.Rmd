@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Prep
-### libraries
+### Load libraries
 ```{r}
 library(tidyverse)
 library(glmnet)
@@ -56,6 +56,7 @@ Let's plot them 10 variables at a time for readability.
 # pairs(train[idx])
 ```
 
+
 ### Bind train and test data
 This step ensures that all factors have the same number of levels in both training and test sets. 
 ```{r}
@@ -64,9 +65,19 @@ train$is_train <- 1;
 test$is_train <- 0
 test$SalePrice <- NA
 
-head(is.na(train$Alley))
+dat <- rbind(train,test) # create joined dataset
 
-dat <- rbind(train,test)
+plot(dat$X3SsnPorch, dat$SalePrice)
+```
+
+### Remove noise variables
+```{r}
+#vars_to_remove <- c("X3SsnPorch", "Id")
+vars_to_remove <- c("Id")
+
+for (var in vars_to_remove) {
+    dat[[var]] <- NULL
+}
 ```
 
 ### Encode NAs
@@ -88,7 +99,10 @@ for (var in tricky_numerics) {
     dat[[var]] <- as.integer(dat[[var]])
 }
 
-tricky_factors <- c("BsmtFullBath", "BsmtHalfBath", "GarageCars")
+#dat$KitchenAbvGr
+tricky_factors <- c("BsmtFullBath", "BsmtHalfBath", "GarageCars", "MSSubClass", "OverallCond", 
+                    "FullBath", "HalfBath", "BedroomAbvGr", "KitchenAbvGr", "Fireplaces", 
+                    "MoSold", "YrSold")
 
 for (var in tricky_factors) {
     dat[[var]] <- as.factor(dat[[var]])
@@ -106,6 +120,7 @@ ggplot(dat, aes(x = LotArea)) +
     geom_histogram() +
     labs(title = "LotArea")
 ```
+
 
 ### Add polynomial vars
 ```{r polynomial}
@@ -125,27 +140,63 @@ dat <- cbind(dat, LotArea_SQ, YearBuilt_SQ, YearRemodAdd_SQ,
 head(dat)
 ```
 
-
 ### Refactor factors
 Here's where we enforce consistent levels across the factors in the test and train sets. 
-
-Question: Where best to remove ID column?
 ```{r}
 fact_idx <- sapply(dat, function(x) is.factor(x))   
 fact_vars <- names(dat[fact_idx])
-#fact_vars
 
 quant_idx <- sapply(dat, function(x) is.numeric(x))
-quant_idx[c("is_train", "Id", "SalePrice")] <- FALSE # take out ids, flags, response
+quant_idx[c("is_train", "SalePrice")] <- FALSE # take out ids, flags, response
 quant_vars <- names(dat[quant_idx])
-#numeric_vars
+```
 
+```{r}
+quant_vars
+#fact_vars
+```
 
+### Scatterplots of all quants
+```{r warning=FALSE}
+# plots <- list()
+# idx <- 0
+# for (var in quant_vars){
+#   idx <- idx + 1
+# 
+#   p <- ggplot(dat, aes_string(x = var, y = "SalePrice")) +
+#     theme_minimal() +
+#     scale_y_continuous(labels = scales::dollar) +
+#     geom_point(alpha = .15)
+# 
+#   plots[idx] <- list(p)
+# }
+# 
+# plots
 
+summary(dat$LotArea)
+
+ggplot(dat, aes(x = LotArea)) +
+    geom_density()
+
+ggplot(dat, aes(x = LotArea, y = SalePrice)) +
+    geom_point(alpha = .1) +
+    geom_vline(aes(xintercept = quantile(train$LotArea)[4] + IQR(train$LotArea)*2.5)) +
+    geom_vline(aes(xintercept = quantile(train$LotArea)[2] - IQR(train$LotArea)*2.5))
+
+ggplot(dat, aes(x = GrLivArea, y = SalePrice)) +
+  geom_point(alpha = .1) +
+  geom_vline(aes(xintercept = quantile(train$GrLivArea)[4] + IQR(train$GrLivArea)*3)) +
+  geom_vline(aes(xintercept = quantile(train$GrLivArea)[2] - IQR(train$GrLivArea)*3))
+
+quantile(dat$LotArea)
+# 
+# dat %>%
+#     group_by(PoolArea) %>%
+#     summarize(median = median(SalePrice, na.rm = T))
 ```
 
 ### Test a few factors for length
-Some are longer in the train data than in the test data
+Some are longer in the train data than in the test data. 
 ```{r}
 # check the levels a few vars in this consolidated, train and test data sets
 length(levels(dat$HouseStyle)); length(unique(test$HouseStyle))
