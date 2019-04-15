@@ -24,8 +24,6 @@ library(here)
 train <- read.csv(here("Kaggle_Data", "train.csv"), na.strings = c(""))
 
 test <- read.csv(here("Kaggle_Data", "test.csv"), na.strings = c(""))
-
-#head(test)
 ```
 
 ### Pairwise plots
@@ -66,11 +64,10 @@ test$is_train <- 0
 test$SalePrice <- NA
 
 dat <- rbind(train,test) # create joined dataset
-
-plot(dat$X3SsnPorch, dat$SalePrice)
+#plot(dat$X3SsnPorch, dat$SalePrice)
 ```
 
-### Remove noise variables
+### Remove unhelpful variables
 ```{r}
 #vars_to_remove <- c("X3SsnPorch", "Id")
 vars_to_remove <- c("Id")
@@ -120,7 +117,6 @@ ggplot(dat, aes(x = LotArea)) +
     geom_histogram() +
     labs(title = "LotArea")
 ```
-
 
 ### Add polynomial vars
 ```{r polynomial}
@@ -213,24 +209,6 @@ for (var in quant_vars){
 plots[[14]]
 ```
 
-```{r}
-my_vec <- c("LotArea", "BsmtFinSF1", "TotalBsmtSF", "X1stFlrSF", "GrLivArea", "GarageArea", "OpenPorchSF")
-
-outlierreplacement <- function(dataframe){
-   dataframe %>%          
-           map_at(my_vec, ~ replace(.x, .x %in% boxplot.stats(.x, coef = 3)$out, NA)) %>%
-           bind_cols 
-}
-
-dat_2 <- outlierreplacement(dat)
-
-dat_2 %>% drop_na(my_vec)
-
-```
-
-```{r}
-dat_2 <- dat[dat[,var] > quantile(dat[,var], .25, na.rm = TRUE) - 1.5*IQR(dat[,var], na.rm = TRUE),]
-```
 
 ### Test a few factors for length
 Some are longer in the train data than in the test data. 
@@ -262,6 +240,21 @@ quant_idx <- list.remove(quant_idx, range = 'is_train')
 
 # Confirm that factor levels are now equal
 length(levels(train$HouseStyle));length(levels(test$HouseStyle))
+```
+
+### Remove outliers
+```{r}
+outlier_vars <- c("LotArea", "BsmtFinSF1", "TotalBsmtSF", "X1stFlrSF", "GrLivArea", "GarageArea", "OpenPorchSF")
+
+replace_outliers <- function(dataframe){
+   dataframe %>%          
+           map_at(outlier_vars, ~ replace(.x, .x %in% boxplot.stats(.x, coef = 3)$out, NA)) %>%
+           bind_cols 
+}
+
+train_2 <- replace_outliers(train)
+
+train_2 <- train_2 %>% drop_na(outlier_vars)
 ```
 
 ### Define contrasts function
