@@ -210,14 +210,21 @@ for (var in quant_vars){
   plots[[idx]]
 }
 
-plots[[3]]
+plots[[14]]
 ```
 
 ```{r}
+my_vec <- c("LotArea", "BsmtFinSF1", "TotalBsmtSF", "X1stFlrSF", "GrLivArea", "GarageArea", "OpenPorchSF")
 
-for (var in quant_vars){
-dat_2 <- dat[dat[,var] > quantile(dat[,var], .25, na.rm = TRUE) - 1.5*IQR(dat[,var], na.rm = TRUE) & dat[,var] < quantile(dat[,var], .75, na.rm = TRUE) + 1.5*IQR(dat[,var], na.rm = TRUE),]
+outlierreplacement <- function(dataframe){
+   dataframe %>%          
+           map_at(my_vec, ~ replace(.x, .x %in% boxplot.stats(.x, coef = 3)$out, NA)) %>%
+           bind_cols 
 }
+
+dat_2 <- outlierreplacement(dat)
+
+dat_2 %>% drop_na(my_vec)
 
 ```
 
