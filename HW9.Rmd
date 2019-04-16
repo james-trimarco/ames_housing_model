@@ -1,0 +1,296 @@
+---
+title: 'Stat. Inf. II: Homework 9'
+subtitle: "Ames SalePrice Model"
+author: "Austin Anderson, Gregory Barber, James Trimarco"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+#Prep
+library(tidyverse)
+library(glmnet)
+library(caret)
+library(rstudioapi)
+library(here)
+```
+
+```{r, warning=FALSE, include=FALSE}
+### Read in data from csv files
+train <- read.csv(here("Kaggle_Data", "train.csv"), na.strings = c(""))
+
+test <- read.csv(here("Kaggle_Data", "test.csv"), na.strings = c(""))
+
+#head(test)
+```
+
+```{r fig.height=10, fig.width=10, include = FALSE}
+### Pairwise plots
+#Let's plot them 10 variables at a time for readability.# idx <- unlist(list(81, 1:10))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 11:20))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 21:30))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 31:40))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 41:50))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 51:60))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 61:70))
+# pairs(train[idx])
+# 
+# idx <- unlist(list(81, 71:80))
+# pairs(train[idx])
+```
+
+```{r, include=FALSE}
+### Bind train and test data
+#This step ensures that all factors have the same number of levels in both training and test sets.
+
+# create flag used to separate train and test sets after factorization
+train$is_train <- 1; 
+test$is_train <- 0
+test$SalePrice <- NA
+
+dat <- rbind(train,test) # create joined dataset
+
+plot(dat$X3SsnPorch, dat$SalePrice)
+```
+
+
+```{r, include = FALSE}
+### Remove noise variables
+#vars_to_remove <- c("X3SsnPorch", "Id")
+vars_to_remove <- c("Id")
+
+for (var in vars_to_remove) {
+    dat[[var]] <- NULL
+}
+```
+
+```{r, include = FALSE}
+### Coerce tricky vars
+#These predictors are often misclassified, so we're coercing them explicitly. The NAs introduced by coercion here are correct.
+tricky_numerics <- c("BsmtUnfSF","TotalBsmtSF", "GarageYrBlt", 
+                     "LotFrontage", "MasVnrArea", "BsmtFinSF1", 
+                     "BsmtFinSF2", "GarageArea")
+
+for (var in tricky_numerics) {
+    dat[[var]] <- as.integer(dat[[var]])
+}
+
+#dat$KitchenAbvGr
+tricky_factors <- c("BsmtFullBath", "BsmtHalfBath", "GarageCars", "MSSubClass", "OverallCond", 
+                    "FullBath", "HalfBath", "BedroomAbvGr", "KitchenAbvGr", "Fireplaces", 
+                    "MoSold", "YrSold")
+
+for (var in tricky_factors) {
+    dat[[var]] <- as.factor(dat[[var]])
+}
+```
+
+```{r polynomial, include = FALSE}
+LotArea_SQ <- dat$LotArea**2
+YearBuilt_SQ <- dat$YearBuilt**2
+YearRemodAdd_SQ <- dat$YearRemodAdd**2
+BsmtFinSF1_SQ <- dat$BsmtFinSF1**2
+BsmtFinSF2_SQ <- dat$BsmtFinSF2**2
+X2ndFlrSF_SQ <- dat$X2ndFlrSF**2
+GrLivArea_SQ <- dat$GrLivArea**2
+LotFrontage_SQ <- dat$LotFrontage**2
+    
+dat <- cbind(dat, LotArea_SQ, YearBuilt_SQ, YearRemodAdd_SQ, 
+             BsmtFinSF1_SQ, BsmtFinSF2_SQ, X2ndFlrSF_SQ, GrLivArea_SQ,
+             LotFrontage_SQ)
+
+head(dat)
+```
+
+
+```{r, include=FALSE}
+### Refactor factors
+#Here's where we enforce consistent levels across the factors in the test and train sets. 
+fact_idx <- sapply(dat, function(x) is.factor(x))   
+fact_vars <- names(dat[fact_idx])
+
+quant_idx <- sapply(dat, function(x) is.numeric(x))
+quant_idx[c("is_train", "SalePrice")] <- FALSE # take out ids, flags, response
+quant_vars <- names(dat[quant_idx])
+```
+
+```{r, include = FALSE}
+### Create formula
+#This is used for creating a model matrix. 
+fact_formula <- as.formula(paste("~", 
+                                 paste(fact_vars, sep="", collapse= "+")))
+
+#fact_formula
+```
+
+```{r, include=FALSE}
+### Separate data
+#Get back the train and test data
+library(rlist)
+# Use the flag before to separate observations
+train <- subset(dat, is_train == 1); 
+test <- subset(dat, is_train == 0)
+train$is_train <- NULL; test$is_train <- NULL
+
+# remove flag from quant indices
+quant_idx <- list.remove(quant_idx, range = 'is_train')
+
+# Confirm that factor levels are now equal
+length(levels(train$HouseStyle));length(levels(test$HouseStyle))
+```
+
+```{r, include=FALSE}
+### Define contrasts function
+#Required for creating model matrix
+
+contr.Dummy <- function(contrasts, ...){
+   conT <- contr.treatment(contrasts=FALSE, ...)
+   conT
+}
+options(contrasts=c(ordered='contr.Dummy', unordered='contr.Dummy'))
+```
+
+
+```{r, include=FALSE}
+### Create factors
+#This matrix contains only the factors. The numerical data is accessed separately.
+factors_train <- model.matrix(fact_formula, data = train)
+head(factors_train)[, 5]
+```
+
+```{r, include=FALSE}
+## Fit on train data
+quants_train <- scale(train[, quant_idx])
+#quants_train <- train[, quant_idx]
+
+x_train  <- data.matrix(data.frame(quants_train, factors_train))
+y_train <- data.matrix(train$SalePrice)
+
+glmmod <- glmnet(x_train, y_train, alpha=1, family="gaussian")
+plot(glmmod)
+
+coef(glmmod)[, 15][coef(glmmod)[, 20] > 0]
+```
+
+## Kaggle Competition
+The HW you turn in needs to include:
+
+### a. At least one residual plot
+
+```{r}
+fit <- lm(train$SalePrice ~ ., data = train)
+sr.fit <- rstudent(fit)
+plot(sr.fit~ fitted(fit), xlab = "Predicted Sale Price", ylab = "Studentized Residuals")
+abline(h = 0, col = "red")
+```
+
+The studenized residuals for the most seem to have fairly constant variance about zero, suggesting a linear model is appropriate. There are a couple outliers present, which we took note of. In our modeling code, we removed outliers in key quantitative predictors. 
+
+###  b. At least one interpretation of a multiple regression coefficient using a 95% confidence interval for that coefficient,
+
+First we'll inspect the variable to see if it is normally distributed around the mean of the response. The plot suggest a very rough normal distribution, but definitely not perfect.  
+```{r}
+ggplot(train, aes(x = GarageArea, y = SalePrice)) +
+  geom_smooth(method = "lm") +
+  geom_point()
+```
+
+Now we get a confidence interval for the slope. Since we know the assumptions of this method aren't entirely met, we have to look at this confidence interval with some skepticism. 
+```{r}
+cis <- confint(fit,parm = 'GarageArea')
+cis
+```
+
+For every increase in Garage Area by one square foot, we predict sale price to increase by at least  \$2.28 and at most $33.63, with 95% confidence and keeping all other predictors fixed.
+  
+###  c. The final model that you submitted with a paragraph describing how you came up with that model. Supress (via `echo`) R output from intermediate steps, only show me the important steps. 
+
+We ran into a lot of errors having to do with the levels of the dummy variables not matching in the train and test sets. Our solution involves briefly joining the two datasets into one, which ensures that factors have the same levels. 
+
+We then separated the data andremoved outliers. 
+
+```{r}
+outlier_vars <- c("LotArea", "BsmtFinSF1", "TotalBsmtSF", "X1stFlrSF", "GrLivArea", "GarageArea", "OpenPorchSF")
+
+replace_outliers <- function(dataframe){
+   dataframe %>%          
+           map_at(outlier_vars, ~ replace(.x, .x %in% boxplot.stats(.x, coef = 3)$out, NA)) %>%
+           bind_cols 
+}
+
+train <- replace_outliers(train)
+
+train <- train %>% drop_na(outlier_vars)
+```
+
+### Define contrasts function
+Required for creating model matrix
+```{r include=FALSE}
+contr.Dummy <- function(contrasts, ...){
+   conT <- contr.treatment(contrasts=FALSE, ...)
+   conT
+}
+options(contrasts=c(ordered='contr.Dummy', unordered='contr.Dummy'))
+```
+
+### Create factors
+This matrix contains only the factors. The numerical data is accessed separately.
+```{r include=FALSE}
+factors_train <- model.matrix(fact_formula, data = train)
+head(factors_train)[, 5]
+```
+
+And fit on the training data. 
+
+```{r}
+quants_train <- scale(train[, quant_idx])
+
+x_train  <- data.matrix(data.frame(quants_train, factors_train))
+y_train <- data.matrix(train$SalePrice)
+
+glmmod <- glmnet(x_train, y_train, alpha=1, family="gaussian")
+
+coef(glmmod)[, 15][coef(glmmod)[, 20] > 0]
+
+plot(glmmod, xvar = "lambda", label = TRUE)
+```
+
+One could rewrite the list of coefficients printed above in linear regression notation as:
+
+$$
+\mu_{saleprice} = 173,568 + 25,500 OveralQual + 6,013 TotalBsmtSF + 4025 GarageArea + 13,874 GrLivArea^2 \dots
+$$
+We used cross validation to check the right value for lambda. 
+#### Cross validation
+```{r}
+cv.model <- cv.glmnet(x_train, y_train, 
+                      alpha=1, type.measure = "mse", nfolds = 10)
+
+(best.lambda <- cv.model$lambda.min)
+
+plot(cv.model)
+
+#coef(cv.model)
+```
+ 
+This model got us to position 1996 on Kaggle!
+```{r pressure, echo=FALSE, fig.cap="A caption", out.width = '100%'}
+knitr::include_graphics("Kaggle.png")
+```
+
+One oddness of this experience is that we tried something called elasticnet, which mixes in part of the output from ridge regression and part from lasso. This model was giving us great estimated RMSE values — like $21,500 or so. But that model did not do well on the test data — we got a worse score than our first at 0.18 or so. We're not sure why cross validation suggested this model was the best, and we'd like to understand the experience better. 

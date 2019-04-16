@@ -252,9 +252,9 @@ replace_outliers <- function(dataframe){
            bind_cols 
 }
 
-train_2 <- replace_outliers(train)
+train <- replace_outliers(train)
 
-train_2 <- train_2 %>% drop_na(outlier_vars)
+train <- train %>% drop_na(outlier_vars)
 ```
 
 ### Define contrasts function
@@ -343,14 +343,14 @@ x_test[na_idx_2, ][is.na(x_test[na_idx_2, ])] <- 0
 ```{r}
 preds_l = predict(cv.model, s=cv.model$lambda.min, newx=x_test)
 sum(is.na(preds_l)) # this must be 0
-head(preds_l, 15)
+head(preds_l, 5)
 ```
 
 ### write lasso-only csv
 ```{r}
 preds_l <- data.frame(preds_l) %>% rownames_to_column()
 colnames(preds_l) <- c("Id", "SalePrice")
-head(preds_l, 3)
+head(preds_l, 5)
 
 write.csv(preds_l, row.names = F, 
           file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions_l.csv")
@@ -363,10 +363,10 @@ head(data.frame(x_train))
 
 my_control <- trainControl(method = "repeatedcv",
                            number = 10,
-                           repeats = 3,
+                           repeats = 5,
                            search = "random",
                            verboseIter = TRUE, 
-                        allowParallel = TRUE)
+                           allowParallel = TRUE)
 
 my_elastic_net <- train(x_train,as.double(y_train),
                         method = "glmnet",
@@ -394,7 +394,7 @@ preds_e <- predict(my_elastic_net$finalModel,
 ```{r}
 preds_e <- data.frame(preds_e) %>% rownames_to_column()
 colnames(preds_e) <- c("Id", "SalePrice")
-head(preds_e, 3)
+head(preds_e, 5)
 
 write.csv(preds_e, row.names = F, 
           file = "/Users/james/Documents/NCDS/Semester_2/Inference_II/ames_housing_model/Kaggle_Data/predictions_e.csv")
