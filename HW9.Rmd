@@ -225,7 +225,8 @@ We ran into a lot of errors having to do with the levels of the dummy variables 
 We then separated the data and removed outliers. 
 
 ```{r}
-outlier_vars <- c("LotArea", "BsmtFinSF1", "TotalBsmtSF", "X1stFlrSF", "GrLivArea", "GarageArea", "OpenPorchSF")
+outlier_vars <- c("LotArea", "BsmtFinSF1", "TotalBsmtSF", "X1stFlrSF", 
+                  "GrLivArea", "GarageArea", "OpenPorchSF")
 
 replace_outliers <- function(dataframe){
    dataframe %>%          
@@ -286,6 +287,12 @@ cv.model <- cv.glmnet(x_train, y_train,
 plot(cv.model)
 
 #coef(cv.model)
+```
+ 
+Displaying estimated test RMSE from 10-fold cross-validation:
+```{r}
+rmse.min <- sqrt(cv.model$cvm[cv.model$lambda == cv.model$lambda.min])
+rmse.min
 ```
  
 This model got us to position 1996 on Kaggle!
