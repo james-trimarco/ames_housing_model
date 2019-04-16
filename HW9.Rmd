@@ -199,7 +199,7 @@ plot(sr.fit~ fitted(fit), xlab = "Predicted Sale Price", ylab = "Studentized Res
 abline(h = 0, col = "red")
 ```
 
-The studenized residuals for the most seem to have fairly constant variance about zero, suggesting a linear model is appropriate. There are a couple outliers present, which we took note of. In our modeling code, we removed outliers in key quantitative predictors. 
+The studentized residuals seem to have fairly constant variance, suggesting a linear model is appropriate. There are a couple outliers present, which we took note of. There may also be a slight pattern emerging as the residuals become more positive as the predicted price increases.  In our modeling code, we removed outliers in key quantitative predictors. 
 
 ###  b. At least one interpretation of a multiple regression coefficient using a 95% confidence interval for that coefficient,
 
@@ -216,13 +216,13 @@ cis <- confint(fit,parm = 'GarageArea')
 cis
 ```
 
-For every increase in Garage Area by one square foot, we predict sale price to increase by at least  \$2.28 and at most $33.63, with 95% confidence and keeping all other predictors fixed.
+For every one square foot increase in Garage Area, we predict sale price to increase by at least  \$2.28 and at most $33.63, with 95% confidence while keeping all other predictors fixed.
   
 ###  c. The final model that you submitted with a paragraph describing how you came up with that model. Supress (via `echo`) R output from intermediate steps, only show me the important steps. 
 
 We ran into a lot of errors having to do with the levels of the dummy variables not matching in the train and test sets. Our solution involves briefly joining the two datasets into one, which ensures that factors have the same levels. 
 
-We then separated the data andremoved outliers. 
+We then separated the data and removed outliers. 
 
 ```{r}
 outlier_vars <- c("LotArea", "BsmtFinSF1", "TotalBsmtSF", "X1stFlrSF", "GrLivArea", "GarageArea", "OpenPorchSF")
@@ -293,4 +293,4 @@ This model got us to position 1996 on Kaggle!
 knitr::include_graphics("Kaggle.png")
 ```
 
-One oddness of this experience is that we tried something called elasticnet, which mixes in part of the output from ridge regression and part from lasso. This model was giving us great estimated RMSE values — like $21,500 or so. But that model did not do well on the test data — we got a worse score than our first at 0.18 or so. We're not sure why cross validation suggested this model was the best, and we'd like to understand the experience better. 
+One oddness of this experience is that we tried something called elasticnet, which mixes in part of the output from ridge regression and part from lasso. This model was giving us great estimated RMSE values -- like $21,500 or so. But that model did not do well on the test data -- we got a worse score than our first at 0.18 or so. We're not sure why cross validation suggested this model was the best, and we'd like to understand the experience better. 
